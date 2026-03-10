@@ -28,12 +28,38 @@ class Organization(Base):
     has_sustainability_mandate = Column(Boolean, nullable=True)
     has_emerging_manager_program = Column(Boolean, nullable=True)
 
+    # D1: Sector & Mandate Fit — sub-components
+    d1_a_lp_status = Column(Float, nullable=True)
+    d1_a_reasoning = Column(Text)
+    d1_b_credit = Column(Float, nullable=True)
+    d1_b_reasoning = Column(Text)
+    d1_c_sustainability = Column(Float, nullable=True)
+    d1_c_reasoning = Column(Text)
     sector_fit_score = Column(Float, nullable=True)
     sector_fit_reasoning = Column(Text)
+    d1_confidence = Column(String, nullable=True)
+
+    # D3: Halo & Strategic Value — sub-components
+    d3_a_brand = Column(Float, nullable=True)
+    d3_a_reasoning = Column(Text)
+    d3_b_network = Column(Float, nullable=True)
+    d3_b_reasoning = Column(Text)
+    d3_c_specificity = Column(Float, nullable=True)
+    d3_c_reasoning = Column(Text)
     halo_score = Column(Float, nullable=True)
     halo_reasoning = Column(Text)
+    d3_confidence = Column(String, nullable=True)
+
+    # D4: Emerging Manager Fit — sub-components
+    d4_a_structural = Column(Float, nullable=True)
+    d4_a_reasoning = Column(Text)
+    d4_b_track_record = Column(Float, nullable=True)
+    d4_b_reasoning = Column(Text)
+    d4_c_mission = Column(Float, nullable=True)
+    d4_c_reasoning = Column(Text)
     emerging_manager_score = Column(Float, nullable=True)
     emerging_manager_reasoning = Column(Text)
+    d4_confidence = Column(String, nullable=True)
 
     estimated_check_size_low = Column(Float, nullable=True)
     estimated_check_size_high = Column(Float, nullable=True)
@@ -58,14 +84,41 @@ class Organization(Base):
         self.enriched_at = datetime.now(timezone.utc)
 
     def apply_scores(self, scores: "ScoringResult") -> None:
-        """Apply structured scoring data to this organization."""
+        """Apply structured scoring data including sub-components."""
         from pese.models import ScoringResult
+
+        # D1 sub-components
+        self.d1_a_lp_status = scores.d1_a_lp_status
+        self.d1_a_reasoning = scores.d1_a_reasoning
+        self.d1_b_credit = scores.d1_b_credit
+        self.d1_b_reasoning = scores.d1_b_reasoning
+        self.d1_c_sustainability = scores.d1_c_sustainability
+        self.d1_c_reasoning = scores.d1_c_reasoning
         self.sector_fit_score = scores.sector_fit_score
         self.sector_fit_reasoning = scores.sector_fit_reasoning
+        self.d1_confidence = scores.d1_confidence
+
+        # D3 sub-components
+        self.d3_a_brand = scores.d3_a_brand
+        self.d3_a_reasoning = scores.d3_a_reasoning
+        self.d3_b_network = scores.d3_b_network
+        self.d3_b_reasoning = scores.d3_b_reasoning
+        self.d3_c_specificity = scores.d3_c_specificity
+        self.d3_c_reasoning = scores.d3_c_reasoning
         self.halo_score = scores.halo_score
         self.halo_reasoning = scores.halo_reasoning
+        self.d3_confidence = scores.d3_confidence
+
+        # D4 sub-components
+        self.d4_a_structural = scores.d4_a_structural
+        self.d4_a_reasoning = scores.d4_a_reasoning
+        self.d4_b_track_record = scores.d4_b_track_record
+        self.d4_b_reasoning = scores.d4_b_reasoning
+        self.d4_c_mission = scores.d4_c_mission
+        self.d4_c_reasoning = scores.d4_c_reasoning
         self.emerging_manager_score = scores.emerging_manager_score
         self.emerging_manager_reasoning = scores.emerging_manager_reasoning
+        self.d4_confidence = scores.d4_confidence
 
     def apply_check_size(self, low: float | None, high: float | None) -> None:
         """Set estimated check size range."""

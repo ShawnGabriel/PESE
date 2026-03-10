@@ -1,0 +1,8 @@
+openai>=1.68.0
+pandas>=2.2.0
+sqlalchemy>=2.0.0
+streamlit>=1.41.0
+plotly>=5.24.0
+python-dotenv>=1.0.1
+rich>=13.9.0
+tenacity>=9.0.0

@@ -145,11 +145,20 @@ def _process_organization(
 
 
 def _compute_contact_scores(session) -> None:
-    """Compute composite scores and tiers for all contacts based on their org's scores."""
+    """Compute composite scores and tiers for all contacts based on their org's scores.
+
+    Only contacts whose organization has been enriched receive a composite score.
+    Unenriched contacts are left as UNSCORED to avoid artificially ranking them
+    based on relationship depth alone.
+    """
     contacts = session.query(Contact).all()
     for contact in contacts:
         org = contact.organization
         if org is None:
+            continue
+
+        if not org.is_enriched:
+            contact.apply_composite(None, "UNSCORED")
             continue
 
         composite = compute_composite(
@@ -228,19 +237,37 @@ def _print_summary(session, summary: dict, cost_tracker: CostTracker) -> None:
 
 
 def _run_validation(session) -> None:
-    """Flag scoring anomalies for review."""
+    """Flag scoring anomalies and org-type conflicts for review."""
     console.print("\n[bold yellow]Validation Checks[/bold yellow]")
-    issues: set[str] = set()
+    score_issues: list[str] = []
+    type_conflicts: list[str] = []
 
     for org in session.query(Organization).filter(Organization.enriched_at.isnot(None)).all():
         if org.is_lp is False and org.sector_fit_score and org.sector_fit_score > 5:
-            issues.add(f"  {org.name}: flagged non-LP but sector_fit={org.sector_fit_score:.1f}")
+            score_issues.append(f"  {org.name}: flagged non-LP but sector_fit={org.sector_fit_score:.1f}")
 
         if org.is_lp is True and org.sector_fit_score and org.sector_fit_score < 3:
-            issues.add(f"  {org.name}: flagged LP but sector_fit={org.sector_fit_score:.1f}")
+            score_issues.append(f"  {org.name}: flagged LP but sector_fit={org.sector_fit_score:.1f}")
 
-    if issues:
-        for issue in sorted(issues):
+        if org.enriched_org_type and org.org_type:
+            csv_type = (org.org_type or "").strip().lower()
+            enriched_type = (org.enriched_org_type or "").strip().lower()
+            if csv_type and enriched_type and csv_type != enriched_type:
+                note = org.org_type_conflict_note or "no details"
+                type_conflicts.append(
+                    f"  {org.name}: CSV='{org.org_type}' vs AI='{org.enriched_org_type}' — {note}"
+                )
+
+    if score_issues:
+        console.print("[yellow]Score anomalies:[/yellow]")
+        for issue in sorted(score_issues):
             console.print(f"[yellow]{issue}[/yellow]")
     else:
-        console.print("  [green]No anomalies detected[/green]")
+        console.print("  [green]No score anomalies detected[/green]")
+
+    if type_conflicts:
+        console.print(f"\n[yellow]Org-type conflicts ({len(type_conflicts)}):[/yellow]")
+        for conflict in sorted(type_conflicts):
+            console.print(f"[yellow]{conflict}[/yellow]")
+    else:
+        console.print("  [green]No org-type conflicts detected[/green]")

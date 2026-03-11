@@ -21,6 +21,9 @@ class Organization(Base):
     org_type = Column(String)
     region = Column(String)
 
+    enriched_org_type = Column(String, nullable=True)
+    org_type_conflict_note = Column(Text, nullable=True)
+
     enrichment_summary = Column(Text)
     aum_millions = Column(Float, nullable=True)
     is_lp = Column(Boolean, nullable=True)
@@ -55,8 +58,9 @@ class Organization(Base):
     d4_a_reasoning = Column(Text)
     d4_b_track_record = Column(Float, nullable=True)
     d4_b_reasoning = Column(Text)
-    d4_c_mission = Column(Float, nullable=True)
+    d4_c_checksize = Column(Float, nullable=True)
     d4_c_reasoning = Column(Text)
+    d4_red_flags = Column(Text, nullable=True)
     emerging_manager_score = Column(Float, nullable=True)
     emerging_manager_reasoning = Column(Text)
     d4_confidence = Column(String, nullable=True)
@@ -80,6 +84,8 @@ class Organization(Base):
         self.has_emerging_manager_program = enrichment.has_emerging_manager_program
         self.aum_millions = enrichment.aum_millions
         self.confidence = enrichment.confidence
+        self.enriched_org_type = enrichment.enriched_org_type or None
+        self.org_type_conflict_note = enrichment.org_type_conflict_note or None
         self.enrichment_cost_usd = cost_usd
         self.enriched_at = datetime.now(timezone.utc)
 
@@ -114,11 +120,12 @@ class Organization(Base):
         self.d4_a_reasoning = scores.d4_a_reasoning
         self.d4_b_track_record = scores.d4_b_track_record
         self.d4_b_reasoning = scores.d4_b_reasoning
-        self.d4_c_mission = scores.d4_c_mission
+        self.d4_c_checksize = scores.d4_c_checksize
         self.d4_c_reasoning = scores.d4_c_reasoning
         self.emerging_manager_score = scores.emerging_manager_score
         self.emerging_manager_reasoning = scores.emerging_manager_reasoning
         self.d4_confidence = scores.d4_confidence
+        self.d4_red_flags = json.dumps(scores.d4_red_flags) if scores.d4_red_flags else None
 
     def apply_check_size(self, low: float | None, high: float | None) -> None:
         """Set estimated check size range."""

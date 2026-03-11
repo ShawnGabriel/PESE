@@ -75,12 +75,26 @@ python main.py reset
 |-----------|--------|--------|
 | Sector & Mandate Fit | 35% | AI-scored: LP status + credit allocation + sustainability mandate |
 | Relationship Depth | 30% | Pre-computed from CRM (CSV column, used as-is) |
-| Halo & Strategic Value | 20% | AI-scored: brand recognition + signaling value |
-| Emerging Manager Fit | 15% | AI-scored: structural openness + documented programs |
+| Halo & Strategic Value | 20% | AI-scored: brand recognition + network centrality + signal specificity |
+| Emerging Manager Fit | 15% | AI-scored: structural program + behavioral track record + check size fit |
 
 **Composite** = (Sector × 0.35) + (Relationship × 0.30) + (Halo × 0.20) + (Emerging × 0.15)
 
 **Tiers**: >= 8.0 PRIORITY CLOSE | >= 6.5 STRONG FIT | >= 5.0 MODERATE FIT | < 5.0 WEAK FIT
+
+### Research-Backed Weight Rationale
+
+The 35/30/20/15 weights are defined by the challenge specification and validated by academic and industry literature (up to March 2026):
+
+**D1 — Sector & Mandate Fit (35%)**. Mandate alignment is the primary gate in every LP allocation framework studied. Goyal, Wahal & Yavuz (SSRN 3910494, 2021-2024) find that LPs invest in first-time GPs at rates similar to top-quartile performers, suggesting mandate fit outweighs track record as a predictor of commitment. bfinance's "Impact Private Debt: DNA of a Manager Search" (2025) confirms mandate alignment as the threshold filter for impact private debt specifically. The GIIN "State of the Market 2025" survey shows two-thirds of impact investors now formalize impact criteria in investment governance, making sustainability mandates a reliable structural signal.
+
+**D2 — Relationship Depth (30%)**. Warm introductions convert at ~4x the rate of cold outreach (74% vs ~20%), and GPs with systematic relationship mapping close funds 6-9 months faster (Altss, "Institutional LP Allocation Decision Framework," 2024-2025). Lerner et al. (SSRN 2514248) show relationship depth functions as currency in private markets — LPs with deeper GP relationships gain access to oversubscribed funds. This dimension is pre-computed from CRM data and reflects effort already invested, making it the most actionable signal for a fundraising team.
+
+**D3 — Halo & Strategic Value (20%)**. Cole & Zochowski (HBS, 2020) find that impact funds with anchor investors are $9M larger at final close, driven by a catalytic "halo effect" where the anchor's endorsement signals quality to risk-averse LPs. For emerging managers with weak signals (limited track record), halo amplification is disproportionately valuable — unrealized performance positively influences fundraising only when amplified by institutional credibility (Exeter, "Media Attention and Resource Mobilization," 2024). PE firms sharing common LP partners are 3x more likely to transact (Clique Premium Research, 2024), validating network centrality as a measurable signal.
+
+**D4 — Emerging Manager Fit (15%)**. Rede Partners (September 2024) surveyed 68 US-based LPs actively investing in emerging managers: 100% plan to maintain or increase EM allocations, but 74% still prioritize proven track records, confirming EM fit as a secondary filter downstream of mandate alignment. Only 0.26% of $92.2T in institutional assets is managed by emerging managers (LEIA, 2025), making EM program presence a meaningful differentiator when found.
+
+**Cross-cutting**: Braun, Jenkinson, Schemmerl & Phalippou (SSRN 4490991, 2023) demonstrate a 25% performance spread between top and bottom terciles based on qualitative PPM information that LPs fail to incorporate — validating the use of AI to extract and score qualitative signals (mandate fit, sustainability, EM programs) that traditional processes handle poorly. The weighted composite approach is consistent with Analytic Hierarchy Process (AHP) methodology used in institutional investment appraisal (IJEF, 2023).
 
 ## Cost Estimation
 
@@ -102,10 +116,15 @@ PESE/
 │   └── challenge_contacts.csv
 └── pese/
     ├── config.py        # Configuration and constants
-    ├── database.py      # SQLAlchemy models
+    ├── database.py      # SQLAlchemy ORM models
+    ├── models.py        # Structured dataclasses (EnrichmentResult, ScoringResult)
+    ├── exceptions.py    # Custom exception hierarchy
     ├── ingest.py        # CSV ingestion with org dedup
-    ├── enrichment.py    # AI web enrichment
-    ├── scoring.py       # Scoring rubrics and composite logic
+    ├── scoring.py       # Composite scoring and tier classification
     ├── cost_tracker.py  # API cost tracking
-    └── pipeline.py      # Orchestrator
+    ├── pipeline.py      # Orchestrator with validation layer
+    └── providers/
+        ├── __init__.py  # Provider factory
+        ├── base.py      # Abstract AIProvider interface
+        └── openai.py    # OpenAI implementation (web search + scoring prompts)
 ```

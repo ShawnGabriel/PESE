@@ -75,8 +75,9 @@ def load_data():
             "D4a Reasoning": org.d4_a_reasoning if org else "",
             "D4b Track Record": org.d4_b_track_record if org else None,
             "D4b Reasoning": org.d4_b_reasoning if org else "",
-            "D4c Mission": org.d4_c_mission if org else None,
+            "D4c Check Size": org.d4_c_checksize if org else None,
             "D4c Reasoning": org.d4_c_reasoning if org else "",
+            "D4 Red Flags": org.d4_red_flags if org else "",
             "Emerging Reasoning": org.emerging_manager_reasoning if org else "",
             "D4 Confidence": org.d4_confidence if org else "",
         })
@@ -265,9 +266,13 @@ def main():
                     st.caption(f"Confidence: **{conf}**")
                 if row.get("Emerging Reasoning"):
                     st.info(row["Emerging Reasoning"])
-                _score_bar("Structural Openness", row.get("D4a Structural"), "40%", row.get("D4a Reasoning", ""))
-                _score_bar("EM Track Record", row.get("D4b Track Record"), "40%", row.get("D4b Reasoning", ""))
-                _score_bar("Mission Alignment", row.get("D4c Mission"), "20%", row.get("D4c Reasoning", ""))
+                _score_bar("Structural Program", row.get("D4a Structural"), "40%", row.get("D4a Reasoning", ""))
+                _score_bar("Behavioral Track Record", row.get("D4b Track Record"), "40%", row.get("D4b Reasoning", ""))
+                _score_bar("Check Size Fit", row.get("D4c Check Size"), "20%", row.get("D4c Reasoning", ""))
+
+                red_flags = row.get("D4 Red Flags", "")
+                if red_flags and red_flags != "[]":
+                    st.warning(f"Red flags: {red_flags}")
 
             # Multi-contact orgs
             if len(org_rows) > 1:

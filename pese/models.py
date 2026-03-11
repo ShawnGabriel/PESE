@@ -1,5 +1,5 @@
 """Structured data models for enrichment and scoring results."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -20,6 +20,9 @@ class EnrichmentResult:
     emerging_manager_evidence: str = ""
     confidence: str = "low"
     key_findings: str = ""
+    enriched_org_type: str = ""
+    org_type_matches_csv: bool | None = None
+    org_type_conflict_note: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "EnrichmentResult":
@@ -86,19 +89,20 @@ class ScoringResult:
     d3_confidence: str = "MEDIUM"
 
     # --- Dimension 4: Emerging Manager Fit ---
-    # Component A: Structural Openness (40%)
+    # Component A: Structural Program (40%)
     d4_a_structural: float | None = None
     d4_a_reasoning: str = ""
-    # Component B: Emerging Manager Track Record (40%)
+    # Component B: Behavioral Track Record (40%)
     d4_b_track_record: float | None = None
     d4_b_reasoning: str = ""
-    # Component C: Mission Alignment (20%)
-    d4_c_mission: float | None = None
+    # Component C: Check Size Fit (20%)
+    d4_c_checksize: float | None = None
     d4_c_reasoning: str = ""
     # Composite
     emerging_manager_score: float | None = None
     emerging_manager_reasoning: str = ""
     d4_confidence: str = "MEDIUM"
+    d4_red_flags: list[str] = field(default_factory=list)
 
     # Overall confidence
     confidence_note: str = ""
@@ -107,7 +111,7 @@ class ScoringResult:
         for attr in (
             "d1_a_lp_status", "d1_b_credit", "d1_c_sustainability", "sector_fit_score",
             "d3_a_brand", "d3_b_network", "d3_c_specificity", "halo_score",
-            "d4_a_structural", "d4_b_track_record", "d4_c_mission", "emerging_manager_score",
+            "d4_a_structural", "d4_b_track_record", "d4_c_checksize", "emerging_manager_score",
         ):
             setattr(self, attr, _clamp(getattr(self, attr)))
 

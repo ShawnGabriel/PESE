@@ -16,6 +16,7 @@ from pese.config import AI_PROVIDER
 from pese.cost_tracker import CostTracker
 from pese.database import Contact, Organization, RunLog, get_session, init_db
 from pese.exceptions import EnrichmentError, ScoringError
+from pese.models import EnrichmentResult, ScoringResult
 from pese.providers import create_provider
 from pese.providers.base import AIProvider
 from pese.scoring import classify_tier, compute_composite, estimate_check_size
@@ -128,20 +129,82 @@ def _process_organization(
 
     org.apply_enrichment(enrichment, cost_usd=cost_tracker.calls[-1]["cost_usd"] if cost_tracker.calls else 0)
 
-    scores = provider.score(
-        org_name=org.name,
-        org_type=org.org_type or "",
-        region=org.region or "",
-        enrichment=enrichment,
-        cost_tracker=cost_tracker,
-    )
+    if _should_skip_scoring(enrichment):
+        scores = _floor_scores(org.name, enrichment)
+        logger.info(f"Scoring skipped (non-LP): {org.name} — saving 1 API call")
+    else:
+        scores = provider.score(
+            org_name=org.name,
+            org_type=org.org_type or "",
+            region=org.region or "",
+            enrichment=enrichment,
+            cost_tracker=cost_tracker,
+        )
 
     org.apply_scores(scores)
+
+    _apply_non_lp_cap(org)
 
     low, high = estimate_check_size(org.aum_millions, org.org_type)
     org.apply_check_size(low, high)
 
     session.commit()
+
+
+NON_LP_ORG_TYPES = {"asset manager", "ria/fia", "gp/service provider"}
+
+SKIP_SCORING_ORG_TYPES = {"gp/service provider"}
+
+
+def _should_skip_scoring(enrichment: EnrichmentResult) -> bool:
+    """Return True if this org is clearly not an LP, saving a scoring API call.
+
+    Only skips for unambiguous non-LPs (GP/Service Provider with is_lp=False).
+    Mixed or ambiguous cases still go through the scoring model.
+    """
+    if enrichment.is_lp is not False:
+        return False
+    enriched = (enrichment.enriched_org_type or "").strip().lower()
+    return enriched in SKIP_SCORING_ORG_TYPES
+
+
+def _floor_scores(org_name: str, enrichment: EnrichmentResult) -> ScoringResult:
+    """Assign floor scores for confirmed non-LPs without calling the scoring API."""
+    reason = f"Scoring skipped: {org_name} identified as {enrichment.enriched_org_type} (not an LP)."
+    return ScoringResult(
+        d1_a_lp_status=1.0, d1_a_reasoning=reason,
+        d1_b_credit=1.0, d1_b_reasoning=reason,
+        d1_c_sustainability=1.0, d1_c_reasoning=reason,
+        sector_fit_score=1.0, sector_fit_reasoning=reason,
+        d1_confidence="HIGH",
+        d3_a_brand=1.0, d3_a_reasoning=reason,
+        d3_b_network=1.0, d3_b_reasoning=reason,
+        d3_c_specificity=1.0, d3_c_reasoning=reason,
+        halo_score=1.0, halo_reasoning=reason,
+        d3_confidence="HIGH",
+        d4_a_structural=1.0, d4_a_reasoning=reason,
+        d4_b_track_record=1.0, d4_b_reasoning=reason,
+        d4_c_checksize=1.0, d4_c_reasoning=reason,
+        emerging_manager_score=1.0, emerging_manager_reasoning=reason,
+        d4_confidence="HIGH",
+        d4_red_flags=[f"Non-LP: {enrichment.enriched_org_type}"],
+        confidence_note="Scoring bypassed — confirmed non-LP from enrichment.",
+    )
+
+
+def _apply_non_lp_cap(org: Organization) -> None:
+    """Cap sector_fit_score at 3.0 for confirmed non-LPs whose scores slipped past the prompt."""
+    if org.is_lp is not False:
+        return
+    enriched = (org.enriched_org_type or "").strip().lower()
+    if enriched not in NON_LP_ORG_TYPES:
+        return
+    if org.sector_fit_score is not None and org.sector_fit_score > 3.0:
+        logger.info(
+            f"Non-LP cap applied: {org.name} sector_fit {org.sector_fit_score:.1f} → 3.0 "
+            f"(is_lp=False, enriched_org_type={org.enriched_org_type})"
+        )
+        org.sector_fit_score = 3.0
 
 
 def _compute_contact_scores(session) -> None:
@@ -185,6 +248,7 @@ def _print_summary(session, summary: dict, cost_tracker: CostTracker) -> None:
     table.add_row("Unique organizations", str(summary.get("total_orgs_in_db", "—")))
     table.add_row("Orgs enriched this run", str(summary.get("orgs_enriched", "—")))
     table.add_row("API calls", str(cost_tracker.total_calls))
+    table.add_row("Web search calls", str(cost_tracker.total_web_search_calls))
     table.add_row("Total tokens", f"{cost_tracker.total_input_tokens + cost_tracker.total_output_tokens:,}")
     table.add_row("Run cost (USD)", f"${cost_tracker.total_cost:.4f}")
     table.add_row("Projected cost (1,000 orgs)", f"${summary.get('projected_cost_1000_orgs', 0):.2f}")
@@ -194,12 +258,12 @@ def _print_summary(session, summary: dict, cost_tracker: CostTracker) -> None:
         session.query(Contact)
         .filter(Contact.composite_score.isnot(None))
         .order_by(Contact.composite_score.desc())
-        .limit(15)
+        .limit(20)
         .all()
     )
 
     if top:
-        t2 = Table(title="Top 15 Prospects")
+        t2 = Table(title="Top 20 Prospects")
         t2.add_column("#", style="dim")
         t2.add_column("Contact")
         t2.add_column("Organization")

@@ -1,6 +1,6 @@
 # PESE — LP Prospect Enrichment & Scoring Engine
 
-A prototype system that ingests LP prospect contacts, enriches them with publicly available web data using AI, scores them across four dimensions, and presents the scored pipeline through an interactive dashboard.
+A system that ingests LP prospect contacts, enriches them with publicly available web data using AI, scores them across four weighted dimensions, and presents the scored pipeline through an interactive Streamlit dashboard.
 
 Built for PaceZero Capital Partners Fund II fundraising.
 
@@ -12,10 +12,11 @@ CSV → Ingest (dedup by org) → Enrich (OpenAI + web search) → Score (4 dime
 
 **Key design decisions:**
 
-- **Org-level deduplication**: Enrichment runs once per organization (not per contact), saving API costs and ensuring consistency. Multiple contacts at the same org share scores.
-- **Resumability**: The pipeline skips already-enriched orgs, so interrupted runs can be resumed without redundant API calls.
-- **Separation of enrichment and scoring**: Enrichment gathers facts via web search; scoring applies rubrics to those facts. This makes the rubrics auditable and tunable without re-running enrichment.
-- **Cost tracking**: Every API call is logged with token counts and cost estimates.
+- **Org-level deduplication**: Enrichment runs once per organization (not per contact), saving API costs and ensuring consistency. Multiple contacts at the same org share scores. Known aliases are resolved (e.g., PBUCC → Pension Boards United Church of Christ).
+- **Resumability**: The pipeline skips already-enriched orgs (`--no-skip` to override), so interrupted runs can be resumed without redundant API calls.
+- **Separation of enrichment and scoring**: Enrichment gathers facts via web search; scoring applies rubrics to those facts in a separate call. Rubrics are auditable and tunable without re-running enrichment.
+- **Multi-layered LP/GP distinction**: Four layers enforce LP vs GP accuracy: (1) enrichment prompt crosschecks CSV org types against web evidence, (2) scoring prompt has a mandatory pre-scoring check, (3) confirmed GP/Service Providers skip the scoring call entirely, (4) post-processing cap enforces a hard ceiling on sector fit for non-LPs.
+- **Cost tracking**: Every API call is logged with token counts, web search call counts, and cost estimates including projected costs at scale.
 
 ## Setup
 
@@ -69,14 +70,73 @@ python main.py ingest
 python main.py reset
 ```
 
+## Sample Output
+
+Full pipeline run on the 100-contact challenge CSV (99 valid contacts after skipping 1 blank row, mapping to 93 unique organizations after deduplication):
+
+```
+──────────────────────────────── Pipeline Complete ────────────────────────────────
+                Run Summary
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Metric                      ┃ Value     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ Contacts ingested           │ 99        │
+│ Unique organizations        │ 93        │
+│ Orgs enriched this run      │ 93        │
+│ API calls                   │ 183       │
+│ Web search calls            │ 93        │
+│ Total tokens                │ 1,229,978 │
+│ Run cost (USD)              │ $1.2794   │
+│ Projected cost (1,000 orgs) │ $14.06    │
+└─────────────────────────────┴───────────┘
+```
+
+### Top 20 Prospects
+
+```
+┏━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃ #  ┃ Contact             ┃ Organization                   ┃ Sector ┃ Rel. ┃ Halo ┃ Emrg. ┃ Composite ┃ Tier           ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ 1  │ Roman Torres Boscan │ The Schmidt Family Foundation  │    9.4 │  9.0 │  8.2 │   8.0 │       8.8 │ PRIORITY CLOSE │
+│ 2  │ Kim Lew             │ Columbia Investment Mgmt Co.   │    9.0 │  7.0 │  8.0 │   8.0 │       8.1 │ PRIORITY CLOSE │
+│ 3  │ Lorenzo Mendez      │ The Rockefeller Foundation     │    9.3 │  6.0 │  9.3 │   7.6 │       8.1 │ PRIORITY CLOSE │
+│ 4  │ Minoti Dhanaraj     │ Pension Boards UCC (PBUCC)     │    8.2 │  9.0 │  5.8 │   3.4 │       7.2 │ STRONG FIT     │
+│ 5  │ Manuel Alvarez      │ Morgan Stanley Alt. Inv. Ptrs  │    8.5 │  5.0 │  7.8 │   7.6 │       7.2 │ STRONG FIT     │
+│ 6  │ Antonio Casal       │ AlTi Global                    │    8.5 │  4.0 │  7.8 │   8.0 │       6.9 │ STRONG FIT     │
+│ 7  │ Howard Fischer      │ Gratitude Railroad             │    8.2 │  6.0 │  6.0 │   7.0 │       6.9 │ STRONG FIT     │
+│ 8  │ Preet Chawla        │ Carnegie Corporation of NY     │    8.2 │  4.0 │  8.0 │   7.8 │       6.8 │ STRONG FIT     │
+│ 9  │ Alexander Gottlieb  │ Neuberger Berman               │    8.6 │  4.0 │  7.6 │   7.4 │       6.8 │ STRONG FIT     │
+│ 10 │ Michael FitzSimons  │ Bessemer Trust                 │    8.4 │  4.0 │  7.6 │   7.0 │       6.7 │ STRONG FIT     │
+│ 11 │ Lan Cai             │ Pension Boards UCC (PBUCC)     │    8.2 │  7.0 │  5.8 │   3.4 │       6.6 │ STRONG FIT     │
+│ 12 │ Sukant Sethi        │ Lincoln Financial Group        │    8.5 │  4.0 │  6.2 │   7.4 │       6.5 │ STRONG FIT     │
+│ 13 │ Shane Wolter        │ HSBC                           │    8.6 │  4.0 │  7.3 │   4.6 │       6.4 │ MODERATE FIT   │
+│ 14 │ Michael Moriarty    │ Collaborative Capital Advisors │    8.3 │  4.0 │  5.7 │   6.4 │       6.2 │ MODERATE FIT   │
+│ 15 │ Saeed Mouzaffar     │ Willett Advisors               │    8.2 │  4.0 │  6.5 │   4.4 │       6.0 │ MODERATE FIT   │
+│ 16 │ Jake Kaminski       │ Johnson Family Office          │    8.2 │  4.0 │  5.0 │   6.2 │       6.0 │ MODERATE FIT   │
+│ 17 │ Manpreet Singh      │ Singh Capital Partners         │    8.0 │  4.0 │  5.9 │   5.5 │       6.0 │ MODERATE FIT   │
+│ 18 │ Chanmeet Narang     │ Singh Capital Partners         │    8.0 │  4.0 │  5.9 │   5.5 │       6.0 │ MODERATE FIT   │
+│ 19 │ Al Kim              │ Helmsley Charitable Trust      │    8.0 │  4.0 │  6.5 │   4.0 │       5.9 │ MODERATE FIT   │
+│ 20 │ Dan Carroll         │ Inherent Group                 │    8.0 │  5.0 │  5.5 │   3.2 │       5.9 │ MODERATE FIT   │
+└────┴─────────────────────┴────────────────────────────────┴────────┴──────┴──────┴───────┴───────────┴────────────────┘
+```
+
+### Validation
+
+The pipeline runs automated validation after each run:
+
+- **Score anomalies**: Flags non-LPs with high sector fit scores (>5) and confirmed LPs with low scores (<3). Latest run: **0 anomalies detected**.
+- **Org-type conflicts**: Crosschecks CSV-reported org types against AI-enriched classifications. Latest run: **36 conflicts flagged** — the majority are CSV entries labeled "Multi-Family Office" or "Single Family Office" that the AI classified as "Mixed (LP+GP)" based on evidence of both internal management and external allocations.
+- **Non-LP cost optimization**: 3 organizations (Meridian Capital Group, PLP, First New York) were identified as GP/Service Providers during enrichment, so the scoring API call was skipped entirely, saving ~$0.04.
+- **Non-LP score cap**: 3 Asset Managers (Flat World Partners, New Holland Capital, Variant Investments) had sector fit scores capped from 3.5–5.5 → 3.0 by the post-processing safety net.
+
 ## Scoring Dimensions
 
 | Dimension | Weight | Source |
 |-----------|--------|--------|
-| Sector & Mandate Fit | 35% | AI-scored: LP status + credit allocation + sustainability mandate |
-| Relationship Depth | 30% | Pre-computed from CRM (CSV column, used as-is) |
-| Halo & Strategic Value | 20% | AI-scored: brand recognition + network centrality + signal specificity |
-| Emerging Manager Fit | 15% | AI-scored: structural program + behavioral track record + check size fit |
+| Sector & Mandate Fit | 35% | AI-scored: LP status (40%) + credit allocation (30%) + sustainability mandate (30%) |
+| Relationship Depth | 30% | Pre-computed from CRM (CSV column, used as-is per challenge spec) |
+| Halo & Strategic Value | 20% | AI-scored: brand recognition (50%) + network centrality (30%) + signal specificity (20%) |
+| Emerging Manager Fit | 15% | AI-scored: structural program (40%) + behavioral track record (40%) + check size fit (20%) |
 
 **Composite** = (Sector × 0.35) + (Relationship × 0.30) + (Halo × 0.20) + (Emerging × 0.15)
 
@@ -98,33 +158,43 @@ The 35/30/20/15 weights are defined by the challenge specification and validated
 
 ## Cost Estimation
 
-Using `gpt-4o-mini` with web search:
-- ~2 API calls per organization (enrichment + scoring)
-- Estimated ~$0.01–0.03 per organization
-- 100 contacts (~90 unique orgs): ~$1–3
-- 1,000 orgs projected: ~$10–30
+Using `gpt-4o-mini` with web search (Responses API):
+
+| Component | Rate |
+|-----------|------|
+| Input/output tokens | $0.15 / $0.60 per 1M tokens |
+| Web search tool call | $0.01 per call |
+| Web search content tokens | Fixed 8k input tokens per call |
+
+Per organization:
+- 1 enrichment call (web search) + 1 scoring call (chat completions) = 2 API calls
+- Confirmed non-LPs (GP/Service Provider) skip the scoring call, saving ~50% per org
+- Estimated ~$0.012–0.015 per organization (including web search fees)
+- **Actual run: 99 contacts → 93 unique orgs → $1.28 (~$0.014/org)**
+- **Projected: 1,000 orgs → ~$14**
 
 ## Project Structure
 
 ```
 PESE/
-├── main.py              # CLI entry point
-├── dashboard.py         # Streamlit dashboard
+├── main.py              # CLI entry point (ingest, run, dashboard, reset)
+├── dashboard.py         # Streamlit BI layer with filters, charts, detail views
+├── WRITEUP.md           # Design decisions, tradeoffs, and improvements
 ├── requirements.txt
 ├── .env.example
 ├── data/
 │   └── challenge_contacts.csv
 └── pese/
-    ├── config.py        # Configuration and constants
-    ├── database.py      # SQLAlchemy ORM models
+    ├── config.py        # Centralized configuration and constants
+    ├── database.py      # SQLAlchemy ORM models (Organization, Contact, RunLog)
     ├── models.py        # Structured dataclasses (EnrichmentResult, ScoringResult)
     ├── exceptions.py    # Custom exception hierarchy
-    ├── ingest.py        # CSV ingestion with org dedup
-    ├── scoring.py       # Composite scoring and tier classification
-    ├── cost_tracker.py  # API cost tracking
-    ├── pipeline.py      # Orchestrator with validation layer
+    ├── ingest.py        # CSV ingestion with org dedup and alias resolution
+    ├── scoring.py       # Pure composite scoring, tier classification, check-size estimation
+    ├── cost_tracker.py  # API cost tracking (tokens + web search fees)
+    ├── pipeline.py      # Orchestrator with validation layer and cost optimization
     └── providers/
         ├── __init__.py  # Provider factory
         ├── base.py      # Abstract AIProvider interface
-        └── openai.py    # OpenAI implementation (web search + scoring prompts)
+        └── openai.py    # OpenAI implementation (enrichment + scoring prompts)
 ```

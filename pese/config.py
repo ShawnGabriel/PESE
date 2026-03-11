@@ -52,5 +52,8 @@ TOKEN_COSTS = {
     "gpt-4o":      {"input": 2.50, "output": 10.00},
 }
 
-MAX_CONCURRENT_REQUESTS = 5
-ENRICHMENT_BATCH_SIZE = 10
+# Web search tool pricing (Responses API)
+# Per-call fee: $10/1k calls = $0.01 per web_search_call
+WEB_SEARCH_COST_PER_CALL = 0.01
+# gpt-4o-mini/gpt-4.1-mini: fixed 8k input token block per call, billed at model input rate
+WEB_SEARCH_CONTENT_TOKENS_PER_CALL = 8_000

@@ -10,6 +10,18 @@ console = Console()
 
 REQUIRED_COLUMNS = {"Contact Name", "Organization"}
 
+# Maps known acronyms/aliases to their canonical full name.
+# The canonical name is used for the org record and enrichment (gives the LLM better context).
+ORG_ALIASES = {
+    "pbucc": "Pension Boards United Church of Christ",
+}
+
+
+def resolve_org_name(name: str) -> str:
+    """Resolve known aliases/acronyms to canonical org names."""
+    key = name.strip().lower()
+    return ORG_ALIASES.get(key, name.strip())
+
 
 def normalize_org_name(name: str) -> str:
     """Normalize organization names for deduplication."""
@@ -51,7 +63,7 @@ def ingest(csv_path: str | None = None) -> dict:
     orgs_added = 0
 
     for _, row in df.iterrows():
-        org_name = str(row["Organization"]).strip()
+        org_name = resolve_org_name(str(row["Organization"]))
         org_key = normalize_org_name(org_name)
 
         if not org_key:

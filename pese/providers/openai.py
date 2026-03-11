@@ -71,7 +71,7 @@ Respond in JSON format:
     "key_findings": "most important 2-3 findings for LP prospecting",
     "enriched_org_type": "the org type that best describes this entity based on your research. Use one of: Single Family Office, Multi-Family Office, Fund of Funds, Foundation, Endowment, Pension, Insurance, Asset Manager, RIA/FIA, HNWI, Private Capital Firm, GP/Service Provider, Mixed (LP+GP)",
     "org_type_matches_csv": true/false,
-    "org_type_conflict_note": "explanation if the reported type appears incorrect based on your research, or empty string if no conflict"
+    "org_type_conflict_note": "REQUIRED if org_type_matches_csv is false: explain in 1-2 sentences WHY the reported type is wrong and what the org actually does. If org_type_matches_csv is true, use empty string."
 }}
 
 Be factual. If you cannot find reliable information for a field, use null and explain why in the evidence field. Do NOT guess or fabricate information."""
@@ -96,6 +96,20 @@ DIMENSION 1: SECTOR & MANDATE FIT
 ═══════════════════════════════════════════════════════════════
 Question: Does this entity's investment mandate align with PaceZero's sustainability-focused private credit strategy?
 
+*** MANDATORY PRE-SCORING CHECK — do this BEFORE scoring any D1 component ***
+Read the enrichment data fields "enriched_org_type", "is_lp", and "lp_evidence" carefully.
+  - If "is_lp" is false AND "enriched_org_type" is one of: Asset Manager, RIA/FIA,
+    GP/Service Provider → Component A MUST be 1–3. Do not exceed 3.
+  - If "is_lp" is false but "enriched_org_type" is Mixed (LP+GP) → Component A is 3–5
+    depending on the strength of LP evidence.
+  - If "is_lp" is null (unknown) AND "enriched_org_type" is Asset Manager or RIA/FIA
+    → Component A MUST be 1–3 unless "lp_evidence" contains specific evidence of
+    external fund allocations.
+Per bfinance "Impact Private Debt: DNA of a Manager Search" (2025): mandate alignment
+is the threshold gate — organizations that manage assets for others are GPs, not LPs,
+and should be de-prioritized unless there is explicit evidence of external allocations.
+*** END PRE-SCORING CHECK ***
+
 COMPONENT A: LP Status (40% of D1)
 Is this actually a capital allocator (LP) that places money with external fund managers?
   9–10 = Confirmed institutional LP. Clear evidence of allocations to external PE/credit/RE funds.
@@ -105,10 +119,6 @@ Is this actually a capital allocator (LP) that places money with external fund m
   3–4  = Primarily a GP, advisor, or asset manager but might have a small allocation arm.
   1–2  = Clearly NOT an LP. Originates loans, brokers deals, manages assets for others,
          or provides services. Score 1 for obvious non-LPs (e.g., CRE brokerages, lenders).
-
-  DEFAULT: Organizations typed as "Asset Manager" or "RIA/FIA" should default to 1–3 unless
-  there is specific evidence of external fund allocations (acting as an LP). Managing assets
-  for others is GP behavior.
 
 COMPONENT B: Private Credit Allocation (30% of D1)
 Evidence of allocations to private credit, private debt, direct lending, or senior secured funds.
@@ -331,8 +341,10 @@ class OpenAIProvider(AIProvider):
         try:
             data = self._call_with_web_search(prompt, org_name, cost_tracker, purpose="enrichment")
         except Exception as e:
+            logger.warning(f"Web search failed for {org_name}, falling back to chat (no web data): {e}")
             try:
                 data = self._call_chat(prompt, cost_tracker, purpose=f"enrichment_fallback:{org_name}")
+                data.setdefault("confidence", "low")
             except Exception as fallback_err:
                 raise EnrichmentError(org_name, str(fallback_err)) from fallback_err
 
@@ -375,7 +387,10 @@ class OpenAIProvider(AIProvider):
         )
 
         result_text = ""
+        web_search_calls = 0
         for item in response.output:
+            if getattr(item, "type", "") == "web_search_call":
+                web_search_calls += 1
             if hasattr(item, "content"):
                 for block in item.content:
                     if hasattr(block, "text"):
@@ -387,6 +402,7 @@ class OpenAIProvider(AIProvider):
                 input_tokens=getattr(response.usage, "input_tokens", 0),
                 output_tokens=getattr(response.usage, "output_tokens", 0),
                 purpose=f"{purpose}:{org_name}",
+                web_search_calls=web_search_calls,
             )
 
         return self._parse_json(result_text, org_name)
